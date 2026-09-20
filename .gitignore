@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+inbox/
+attachments/
+submission.json
+*.db
+.env
