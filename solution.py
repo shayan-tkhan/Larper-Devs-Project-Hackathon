@@ -2,10 +2,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import time
 from pathlib import Path
 from typing import Any
+
+from dotenv import load_dotenv
+
+
+load_dotenv()
 
 
 COMPARE_FIELDS = (
@@ -32,6 +38,42 @@ BLANK_TOKENS = ("???", "_______", "TBA", "TBC", "N/A", "NA", "")
 SPAM_MARKERS = ("GIFT CARD", "CLAIM NOW", "PARCEL IS ON HOLD", "STORAGE IS FULL", "90% OFF", "BITCOIN")
 INVOICE_MARKERS = ("BILLING", "MISSING GR", "CANCEL INVOICE", "LOCAL CHARGES", "D & D CHARGES")
 GENERAL_MARKERS = ("UPDATE SUMMARY", "BERTHING REPORT", "REMINDER", "RPA", "OUTSTANDING BL")
+
+
+def get_gemini_client() -> Any | None:
+    """Return a configured Gemini client when the API key is available."""
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        return None
+    try:
+        from google import genai
+
+        return genai.Client(api_key=api_key)
+    except Exception:
+        return None
+
+
+def optional_ai_summary(email_subject: str, email_body: str) -> str | None:
+    """Use Gemini for optional enrichment when the environment is configured."""
+    client = get_gemini_client()
+    if client is None:
+        return None
+
+    try:
+        prompt = """Extract the shipping-document triage intent from this email.
+        Return a short summary focused on the document issue and whether it is a BL comparison, SI request, invoice query, or general inquiry.
+
+        Subject: {subject}
+        Body: {body}
+        """.format(subject=email_subject, body=email_body[:4000])
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+        )
+        text = getattr(response, "text", None)
+        return str(text).strip() if text else None
+    except Exception:
+        return None
 
 
 def classify_email(subject: str, body: str, attachments: list[str]) -> str:
