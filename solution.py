@@ -10,7 +10,6 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-
 load_dotenv()
 
 
@@ -38,7 +37,16 @@ BLANK_TOKENS = ("???", "_______", "TBA", "TBC", "N/A", "NA", "")
 SPAM_MARKERS = ("GIFT CARD", "CLAIM NOW", "PARCEL IS ON HOLD", "STORAGE IS FULL", "90% OFF", "BITCOIN")
 INVOICE_MARKERS = ("BILLING", "MISSING GR", "CANCEL INVOICE", "LOCAL CHARGES", "D & D CHARGES")
 GENERAL_MARKERS = ("UPDATE SUMMARY", "BERTHING REPORT", "REMINDER", "RPA", "OUTSTANDING BL")
+WRONG_DOC_MARKERS = ("COMMERCIAL INVOICE", "PACKING LIST", "CERTIFICATE OF ORIGIN")
 
+
+# ---------------------------------------------------------------------------
+# Optional AI extraction layer
+# ---------------------------------------------------------------------------
+# Falls back to pure regex extraction whenever no API key is configured, the
+# dependency isn't installed, or the API call fails for any reason. This
+# means the pipeline behaves identically to the regex-only baseline unless
+# GEMINI_API_KEY (or GOOGLE_API_KEY) is actually set and working.
 
 def get_gemini_client() -> Any | None:
     """Return a configured Gemini client when the API key is available."""
@@ -47,33 +55,54 @@ def get_gemini_client() -> Any | None:
         return None
     try:
         from google import genai
-
         return genai.Client(api_key=api_key)
-    except Exception:
+    except Exception as exc:
+        print(f"[extract_fields_ai] Gemini client unavailable: {exc}")
         return None
 
 
-def optional_ai_summary(email_subject: str, email_body: str) -> str | None:
-    """Use Gemini for optional enrichment when the environment is configured."""
+def extract_fields_ai(text: str) -> dict[str, str]:
+    """AI-assisted extraction with evidence verification, falling back to regex."""
     client = get_gemini_client()
     if client is None:
-        return None
+        return extract_fields(text)
 
+    field_list = ", ".join(COMPARE_FIELDS)
+    prompt = (
+        f"Extract these fields from the shipping document text: {field_list}. "
+        f"For each field found, return the exact value AND the exact line of source "
+        f"text it came from (verbatim, copy-pasted). Respond as JSON only: "
+        f'{{"field_name": {{"value": "...", "evidence": "..."}}}}. '
+        f"Omit fields you cannot find.\n\nDocument:\n{text[:6000]}"
+    )
     try:
-        prompt = """Extract the shipping-document triage intent from this email.
-        Return a short summary focused on the document issue and whether it is a BL comparison, SI request, invoice query, or general inquiry.
-
-        Subject: {subject}
-        Body: {body}
-        """.format(subject=email_subject, body=email_body[:4000])
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
             contents=prompt,
+            config={"response_mime_type": "application/json"},
         )
-        text = getattr(response, "text", None)
-        return str(text).strip() if text else None
-    except Exception:
-        return None
+        parsed = json.loads(response.text)
+    except Exception as exc:
+        print(f"[extract_fields_ai] AI extraction failed, falling back to regex: {exc}")
+        return extract_fields(text)
+
+    fields: dict[str, str] = {}
+    for field, data in parsed.items():
+        if field not in COMPARE_FIELDS or not isinstance(data, dict):
+            continue
+        value = data.get("value", "")
+        evidence = data.get("evidence", "")
+        if evidence and evidence not in text:
+            continue  # evidence doesn't actually exist in the source — reject it
+        if value:
+            fields[field] = value
+
+    # Fill in anything the model missed using the regex path, rather than
+    # leaving fields blank when AI extraction only partially succeeds.
+    regex_fallback = extract_fields(text)
+    for field, value in regex_fallback.items():
+        fields.setdefault(field, value)
+    return fields
 
 
 def classify_email(subject: str, body: str, attachments: list[str]) -> str:
@@ -100,18 +129,15 @@ def read_document(path: Path) -> str:
             return path.read_text(encoding="utf-8", errors="replace")
         if path.suffix.lower() == ".pdf":
             from pypdf import PdfReader
-
             return "\n".join(page.extract_text() or "" for page in PdfReader(str(path)).pages)
         if path.suffix.lower() == ".docx":
             from docx import Document
-
             document = Document(str(path))
             parts = [paragraph.text for paragraph in document.paragraphs]
             parts.extend(" | ".join(cell.text for cell in row.cells) for table in document.tables for row in table.rows)
             return "\n".join(parts)
         if path.suffix.lower() in {".xlsx", ".xlsm"}:
             from openpyxl import load_workbook
-
             workbook = load_workbook(path, read_only=True, data_only=True)
             rows = []
             for sheet in workbook.worksheets:
@@ -179,12 +205,16 @@ def audit_email(record: dict[str, Any], data_root: Path) -> dict[str, Any]:
     if len(si_text.strip()) < 10 or len(bl_text.strip()) < 10:
         result.update(status="NEEDS_REVIEW", review_reason="unreadable")
         return result
-    if any(marker in bl_text.upper() for marker in ("COMMERCIAL INVOICE", "PACKING LIST", "CERTIFICATE OF ORIGIN")):
+    # BUG FIX: previously only checked bl_text (attachments[1]) for the wrong
+    # document type. Now checks both, since a misordered or misattached SI
+    # could equally be the wrong document.
+    if any(marker in si_text.upper() for marker in WRONG_DOC_MARKERS) or \
+       any(marker in bl_text.upper() for marker in WRONG_DOC_MARKERS):
         result.update(status="NEEDS_REVIEW", review_reason="wrong_doc_type")
         return result
 
-    si_fields = extract_fields(si_text)
-    bl_fields = extract_fields(bl_text)
+    si_fields = extract_fields_ai(si_text)
+    bl_fields = extract_fields_ai(bl_text)
     if any(has_blank_value(si_fields.get(field)) or has_blank_value(bl_fields.get(field)) for field in COMPARE_FIELDS):
         result.update(status="NEEDS_REVIEW", review_reason="missing_value")
         return result
@@ -223,6 +253,7 @@ def run_benchmark(root: Path) -> None:
     submission = build_submission(root / "inbox", root)
     elapsed = time.perf_counter() - started
     throughput = len(submission) / elapsed if elapsed else float("inf")
+    ai_active = get_gemini_client() is not None
     print(json.dumps({
         "records": len(submission),
         "elapsed_seconds": round(elapsed, 4),
@@ -230,6 +261,7 @@ def run_benchmark(root: Path) -> None:
         "adversarial_tests": len(stress_cases),
         "adversarial_passed": len(stress_cases) - len(failed),
         "adversarial_failed": failed,
+        "ai_extraction_active": ai_active,
         "ground_truth_metrics": "unavailable: no labeled reference file is bundled",
     }, indent=2))
     if failed:
