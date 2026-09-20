@@ -1,4 +1,4 @@
-# averis-hackathon-2026-
+# Averis-hackathon-2026-
 
 ## DocuAnchor AI
 
