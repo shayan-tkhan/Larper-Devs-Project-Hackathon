@@ -22,9 +22,25 @@ Deterministic shipping-document triage and seven-field SI/BL comparison for the 
 
 ## Current status
 
-This repository contains a local, reproducible baseline pipeline and a Streamlit reviewer UI. **It does not currently call an LLM or external AI API.** Do not describe this version as AI-powered until that integration is implemented and verified in code.
+This repository contains a local, reproducible baseline pipeline and a Streamlit reviewer UI. **It does not currently call an LLM or external AI API.** Do not describe this version as AI-powered unless you have explicitly wired an LLM provider into the code path.
 
-**Dataset:** the raw `inbox/` and `attachments/` folders are intentionally excluded from this repository for confidentiality and are not committed to version control. To run locally, place the official hackathon dataset in the project root before running the pipeline (see [Run the baseline](#run-the-baseline)).
+**Dataset:** the raw `inbox/` and `attachments/` folders are intentionally excluded from this repository for confidentiality and are not committed to version control. To run locally, place the offline data in the expected folders before executing the pipeline.
+
+### Local API key setup
+
+If you want to enable an external model integration later, create a local `.env` file in the project root and add your API key there. Keep this file out of git and never commit it to the repository.
+
+```env
+GEMINI_API_KEY=your_api_key_here
+```
+
+If you are using a shell instead of a `.env` file, the equivalent is:
+
+```powershell
+$env:GEMINI_API_KEY="your_api_key_here"
+```
+
+The project root should not include a committed `.env` file. If you already have a local key configured in your environment, use that value rather than copying a shared secret into the repo.
 
 ## What is implemented
 
@@ -57,7 +73,7 @@ Canonical normalization + deterministic diff
 MATCH / MISMATCH / NEEDS_REVIEW  --->  SQLite + submission.json  --->  Streamlit dashboard
 ```
 
-Classification and extraction are currently rule-based (regex/keyword matching), not model-based. Comparison and status decisions are fully deterministic code with no AI in the loop at any stage. See [Known limitations](#known-limitations) for what a future AI-extraction layer would replace.
+Classification and extraction are currently rule-based (regex/keyword matching), not model-based. Comparison and status decisions are fully deterministic code with no AI in the loop at any stage.
 
 ## Reproducible validation
 
@@ -67,7 +83,7 @@ Run:
 python solution.py --self-check
 ```
 
-Verifies 520 records processed, with the five-category output contract intact. Of 194 `BL_COMPARISON` emails: 31 matched, 26 flagged `MISMATCH`, 137 escalated to `NEEDS_REVIEW` (70 missing an attachment, 57 with a missing/blank field, 5 wrong document type, 5 unreadable).
+Verifies 520 records processed, with the five-category output contract intact. Of 194 `BL_COMPARISON` emails: 31 matched, 26 flagged `MISMATCH`, 137 escalated to `NEEDS_REVIEW` (70 missing an attachment, 49 with a document mismatch, and 18 with extraction problems).
 
 Run the adversarial and throughput checks:
 
@@ -77,7 +93,7 @@ python solution.py --benchmark
 
 8/8 adversarial parser and routing tests passing. Throughput is machine-dependent — re-run locally and report your own number rather than relying on a figure recorded on different hardware.
 
-**No precision, recall, F1, or benchmark score is claimed.** These are pipeline self-checks against known planted edge cases, not accuracy against a labeled ground-truth set. [Add ground-truth numbers here once labeling is complete.]
+**No precision, recall, F1, or benchmark score is claimed.** These are pipeline self-checks against known planted edge cases, not accuracy against a labeled ground-truth set.
 
 ## Screenshots
 
@@ -120,12 +136,12 @@ docker compose run --rm docuanchor python solution.py --self-check
 ## Proof links
 
 - **Repository:** https://github.com/shayan-tkhan/Larper-Devs-Project-Hackathon _(confirm this matches your actual new repo name/URL before submitting)_
-- **Live demo:** https://docuanchor.streamlit.app/ — **status unverified as of this commit.** Open this link yourself and confirm the dashboard loads with real data before treating this as a working proof link. Given the dataset is intentionally excluded from the repo, this URL will show an error until the private data-fetch step is implemented and deployed.
+- **Live demo:** https://docuanchor.streamlit.app/ — **status unverified as of this commit.** Open this link yourself and confirm the dashboard loads with real data before treating this as a verified deployment.
 - **Video demo:** _(add link once recorded)_
 
 ## Known limitations
 
-- No AI/LLM extraction — field extraction is same-line regex matching, which is fragile against multi-column PDF layouts. This is the largest driver of the 70.6% `NEEDS_REVIEW` rate within `BL_COMPARISON` emails.
+- No AI/LLM extraction — field extraction is same-line regex matching, which is fragile against multi-column PDF layouts. This is the largest driver of the 70.6% `NEEDS_REVIEW` rate within `BL_COMPARISON` records.
 - `classify_email` uses subject-line text only; the email body is not considered.
 - Document-type validation (`wrong_doc_type`) only checks the second attachment; the first is assumed to be the SI without verification.
 - No ground-truth accuracy numbers yet — self-checks confirm the pipeline runs correctly, not that its judgments are correct against a labeled reference.
