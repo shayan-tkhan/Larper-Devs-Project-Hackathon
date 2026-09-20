@@ -220,6 +220,3 @@ __marimo__/
 submission.json
 *.db
 .env
-# Hackathon dataset — excluded for confidentiality
-inbox/
-attachments/
