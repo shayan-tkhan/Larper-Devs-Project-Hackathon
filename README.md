@@ -1,10 +1,30 @@
-# Averis-hackathon-2026-
+# DocuAnchor
 
-## DocuAnchor AI
+Deterministic shipping-document triage and seven-field SI/BL comparison for the Averis x Monash Hackathon 2026 dataset.
 
-Deterministic shipping-document triage and seven-field SI/BL comparison for the Averis x Monash Hackathon dataset.
+[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/)
+[![Docker Ready](https://img.shields.io/badge/docker-ready-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Averis x Monash](https://img.shields.io/badge/Hackathon-Averis%20x%20Monash%202026-orange)](https://averis.biz/)
 
-**Current implementation status:** the repository contains a local, reproducible baseline and Streamlit reviewer UI. It does **not** currently call an LLM or external AI API, and it does **not** include a deployed public URL. Do not describe this version as AI-powered or cloud-hosted until those integrations are implemented and verified.
+## Contents
+
+- [Current status](#current-status)
+- [What is implemented](#what-is-implemented)
+- [Architecture](#architecture)
+- [Reproducible validation](#reproducible-validation)
+- [Screenshots](#screenshots)
+- [Run the baseline](#run-the-baseline)
+- [Open the reviewer dashboard](#open-the-reviewer-dashboard)
+- [Run with Docker](#run-with-docker)
+- [Proof links](#proof-links)
+- [Known limitations](#known-limitations)
+- [Team](#team)
+
+## Current status
+
+This repository contains a local, reproducible baseline pipeline and a Streamlit reviewer UI. **It does not currently call an LLM or external AI API.** Do not describe this version as AI-powered until that integration is implemented and verified in code.
+
+**Dataset:** the raw `inbox/` and `attachments/` folders are intentionally excluded from this repository for confidentiality and are not committed to version control. To run locally, place the official hackathon dataset in the project root before running the pipeline (see [Run the baseline](#run-the-baseline)).
 
 ## What is implemented
 
@@ -12,8 +32,32 @@ Deterministic shipping-document triage and seven-field SI/BL comparison for the 
 - Reads TXT, PDF, DOCX, and XLSX attachments.
 - Extracts and normalizes `shipper`, `consignee`, `notify_party`, `port_of_loading`, `port_of_discharge`, `container_count`, and `gross_weight_kg`.
 - Reports `MISMATCH` records with exact defect fields.
-- Escalates `missing_attachment`, `wrong_doc_type`, `unreadable`, and `missing_value` cases as `NEEDS_REVIEW` while preserving the original email category.
-- Provides a local Streamlit inspection dashboard and optional Docker packaging.
+- Escalates `missing_attachment`, `wrong_doc_type`, `unreadable`, and `missing_value` cases as `NEEDS_REVIEW`, while preserving the original email category.
+- Persists results to SQLite (`docuanchor.db`) with attachment bytes and SHA-256 hashes.
+- Provides a local Streamlit reviewer dashboard and optional Docker packaging.
+
+## Architecture
+
+```
+Inbox (520 records)
+      |
+      v
+Intent classification  --------->  5 categories
+      |
+      v (BL_COMPARISON only)
+Multi-format document read (pypdf / python-docx / openpyxl / txt)
+      |
+      v
+Field extraction (7 fields) + edge-case detection
+      |
+      v
+Canonical normalization + deterministic diff
+      |
+      v
+MATCH / MISMATCH / NEEDS_REVIEW  --->  SQLite + submission.json  --->  Streamlit dashboard
+```
+
+Classification and extraction are currently rule-based (regex/keyword matching), not model-based. Comparison and status decisions are fully deterministic code with no AI in the loop at any stage. See [Known limitations](#known-limitations) for what a future AI-extraction layer would replace.
 
 ## Reproducible validation
 
@@ -23,60 +67,45 @@ Run:
 python solution.py --self-check
 ```
 
-The current dataset run verifies 520 records, 137 human-review statuses, 26 mismatches, and the five-category output contract. These are pipeline checks, not ground-truth accuracy scores; a scorer or labeled reference set is required to claim precision, recall, F1, or a benchmark score.
+Verifies 520 records processed, with the five-category output contract intact. Of 194 `BL_COMPARISON` emails: 31 matched, 26 flagged `MISMATCH`, 137 escalated to `NEEDS_REVIEW` (70 missing an attachment, 57 with a missing/blank field, 5 wrong document type, 5 unreadable).
 
-Run the reproducible stress and throughput checks:
+Run the adversarial and throughput checks:
 
 ```powershell
 python solution.py --benchmark
 ```
 
-Observed local benchmark: 520 records in 2.3169 seconds (224.44 records/second), with 8/8 adversarial parser and routing tests passing. Throughput varies by machine. No Macro-F1, precision, recall, or weighted competition score is claimed because this repository does not contain a labeled ground-truth reference file.
+8/8 adversarial parser and routing tests passing. Throughput is machine-dependent — re-run locally and report your own number rather than relying on a figure recorded on different hardware.
 
-## Proof links
+**No precision, recall, F1, or benchmark score is claimed.** These are pipeline self-checks against known planted edge cases, not accuracy against a labeled ground-truth set. [Add ground-truth numbers here once labeling is complete.]
 
-The repository must be made public, or the final submission must use the correct public repository URL, before sharing it with judges. The currently configured Git remote is:
+## Screenshots
 
-```text
-https://github.com/shayan-tkhan/averis-hackathon-2026-
-```
-
-No public Cloud Run URL is included because no verified deployment exists in this repository.
+_(Add 2-4 screenshots of the dashboard here: the metrics row, a MISMATCH email with defect fields shown, and the category filter in use.)_
 
 ## Run the baseline
-
-Create a virtual environment and install the document readers:
 
 ```powershell
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-```
-
-Generate the deterministic submission from the local dataset:
-
-```powershell
 python solution.py --self-check
 ```
 
-This reads the 520 inbox records, classifies each email, extracts the seven comparison fields, identifies document-review reasons, and writes `submission.json`. The raw `inbox/`, `attachments/`, and generated submission are ignored by Git.
+This reads the inbox records, classifies each email, extracts the seven comparison fields, identifies review reasons, and writes `submission.json`.
 
 ## Open the reviewer dashboard
-
-Install the dashboard dependency and launch it from the repository root:
 
 ```powershell
 pip install -r requirements.txt
 streamlit run app_ui.py
 ```
 
-The dashboard lets you filter the inbox by category, inspect each email and its verification result, re-run `solution.py`, and download the generated submission.
-
-The dashboard metrics distinguish verified BL matches from emails that were not comparison requests. Use the sidebar's SQLite import action to refresh `docuanchor.db`, which stores email metadata, pipeline results, attachment bytes, and SHA-256 hashes locally.
+Filter by category, inspect any email and its verification result, re-run the pipeline, refresh the SQLite store, and download the generated submission — all from the sidebar.
 
 ## Run with Docker
 
-Docker is optional for local scoring. It packages the Python runtime and dependencies consistently for teammates and cloud deployment. The raw dataset remains outside the image and is mounted by Compose:
+Docker packages the Python runtime and dependencies consistently across machines. The raw dataset stays outside the image and is provided at build/run time, not committed to it.
 
 ```powershell
 docker compose up --build
@@ -87,3 +116,24 @@ Open `http://localhost:8501`. To generate the submission inside the container:
 ```powershell
 docker compose run --rm docuanchor python solution.py --self-check
 ```
+
+## Proof links
+
+- **Repository:** https://github.com/shayan-tkhan/Larper-Devs-Project-Hackathon _(confirm this matches your actual new repo name/URL before submitting)_
+- **Live demo:** https://docuanchor.streamlit.app/ — **status unverified as of this commit.** Open this link yourself and confirm the dashboard loads with real data before treating this as a working proof link. Given the dataset is intentionally excluded from the repo, this URL will show an error until the private data-fetch step is implemented and deployed.
+- **Video demo:** _(add link once recorded)_
+
+## Known limitations
+
+- No AI/LLM extraction — field extraction is same-line regex matching, which is fragile against multi-column PDF layouts. This is the largest driver of the 70.6% `NEEDS_REVIEW` rate within `BL_COMPARISON` emails.
+- `classify_email` uses subject-line text only; the email body is not considered.
+- Document-type validation (`wrong_doc_type`) only checks the second attachment; the first is assumed to be the SI without verification.
+- No ground-truth accuracy numbers yet — self-checks confirm the pipeline runs correctly, not that its judgments are correct against a labeled reference.
+
+## Team
+
+| Name | GitHub | Role |
+|---|---|---|
+| _Name_ | _@handle_ | Pipeline logic, validation |
+| _Name_ | _@handle_ | Deployment, data infrastructure |
+| _Name_ | _@handle_ | Dashboard, documentation, submission |
