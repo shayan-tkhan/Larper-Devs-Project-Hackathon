@@ -81,7 +81,9 @@ python solution.py --benchmark
 
 ## Screenshots
 
-_(Add 2-4 screenshots of the dashboard here: the metrics row, a MISMATCH email with defect fields shown, and the category filter in use.)_
+<img width="1374" height="498" alt="image" src="https://github.com/user-attachments/assets/4178c360-c5b9-49d3-a169-9c32020cd19e" />
+<img width="1373" height="541" alt="image" src="https://github.com/user-attachments/assets/695aaaba-07f5-4156-ae00-ef7c7db43035" />
+<img width="1374" height="608" alt="image" src="https://github.com/user-attachments/assets/935623ff-d4a0-496d-888b-6a116b5bcc2f" />
 
 ## Run the baseline
 
