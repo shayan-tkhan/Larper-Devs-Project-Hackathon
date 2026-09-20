@@ -136,7 +136,7 @@ docker compose run --rm docuanchor python solution.py --self-check
 ## Proof links
 
 - **Repository:** https://github.com/shayan-tkhan/Larper-Devs-Project-Hackathon _(confirm this matches your actual new repo name/URL before submitting)_
-- **Live demo:** https://docuanchor.streamlit.app/ — **status unverified as of this commit.** Open this link yourself and confirm the dashboard loads with real data before treating this as a verified deployment.
+- **Live demo:** https://larper-devs-project-hackathon.streamlit.app/ — **status unverified as of this commit.** Open this link yourself and confirm the dashboard loads with real data before treating this as a verified deployment.
 - **Video demo:** _(add link once recorded)_
 
 ## Known limitations
@@ -150,6 +150,6 @@ docker compose run --rm docuanchor python solution.py --self-check
 
 | Name | GitHub | Role |
 |---|---|---|
-| _Name_ | _@handle_ | Pipeline logic, validation |
-| _Name_ | _@handle_ | Deployment, data infrastructure |
-| _Name_ | _@handle_ | Dashboard, documentation, submission |
+| _Shayan_ | _shayan-tkhan_ | Pipeline logic, validation |
+| _Syed_ | _syed-93_ | Deployment, data infrastructure |
+| _Abu huraira_ | _Abuhuraira-PY-T_ | Dashboard, documentation, submission |
