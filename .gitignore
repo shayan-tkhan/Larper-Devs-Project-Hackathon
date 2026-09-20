@@ -222,3 +222,6 @@ attachments/
 submission.json
 *.db
 .env
+# Hackathon dataset — excluded for confidentiality
+inbox/
+attachments/
