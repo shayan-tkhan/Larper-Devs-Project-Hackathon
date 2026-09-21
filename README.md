@@ -121,8 +121,8 @@ docker compose run --rm docuanchor python solution.py --self-check
 
 ## Proof links
 
-- **Repository:** https://github.com/shayan-tkhan/Larper-Devs-Project-Hackathon _(confirm this matches your actual new repo name/URL before submitting)_
-- **Live demo:** https://larper-devs-project-hackathon.streamlit.app/ — **status unverified as of this commit.** Open this link yourself and confirm the dashboard loads with real data before treating this as a working proof link. Given the dataset is intentionally excluded from the repo, this URL will show an error until the private data-fetch step is implemented and deployed.
+- **Repository:** https://github.com/shayan-tkhan/Larper-Devs-Project-Hackathon 
+- **Live demo:** https://larper-devs-project-hackathon.streamlit.app/ —  Open this link yourself and confirm the dashboard loads with real data before treating this as a working proof link. Given the dataset is intentionally excluded from the repo, this URL will show an error until the private data-fetch step is implemented and deployed.
 - **Video demo:** _(add link once recorded)_
 
 ## Known limitations
